@@ -2334,7 +2334,11 @@ func (s *DatabaseAutonomousDatabaseResourceCrud) UpdateWithContext(ctx context.C
 	}
 
 	//WARNING..!! Do not add s.D.HasChange("display_name") to this check, it breaks the current behavior
-	if displayName, ok := s.D.GetOkExists("display_name"); ok {
+	//PATCH: guard displayName with HasChange — the OCI control plane rejects any
+	//UpdateAutonomousDatabase containing displayName on multicloud resources (Database@GCP/Azure/AWS)
+	//with "409-Conflict: operation is blocked for resources deployed at GCP".
+	//See https://github.com/oracle/terraform-provider-oci/issues/2581
+	if displayName, ok := s.D.GetOkExists("display_name"); ok && s.D.HasChange("display_name") {
 		tmp := displayName.(string)
 		request.DisplayName = &tmp
 	}
