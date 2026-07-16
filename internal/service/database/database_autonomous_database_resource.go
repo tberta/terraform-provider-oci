@@ -273,6 +273,16 @@ func DatabaseAutonomousDatabaseResource() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+			//PATCH: escape hatch to clear customer_contacts, mirroring
+			//enable_delete_scheduled_operations above. customer_contacts is
+			//Optional+Computed, so an absent/empty block is indistinguishable from
+			//"unmanaged" and produces NO diff at plan time — making an existing
+			//contact list impossible to clear via Terraform. Deliberately not
+			//Computed: this flag must produce a diff to signal the intent.
+			"enable_delete_customer_contacts": {
+				Type:     schema.TypeBool,
+				Optional: true,
+			},
 			"db_version": {
 				Type:             schema.TypeString,
 				Optional:         true,
@@ -2236,6 +2246,17 @@ func (s *DatabaseAutonomousDatabaseResourceCrud) UpdateWithContext(ctx context.C
 		}
 		if len(tmp) != 0 || s.D.HasChange("customer_contacts") {
 			request.CustomerContacts = tmp
+		}
+	}
+	//PATCH: clear customer_contacts on demand. The block above can never do
+	//it: customer_contacts is Optional+Computed, so removing the block (or a
+	//dynamic block with for_each = []) yields no diff at all, HasChange stays
+	//false, and the empty list never reaches the payload. Mirrors the existing
+	//enable_delete_scheduled_operations handling below.
+	if enableDeleteCustomerContacts, ok := s.D.GetOkExists("enable_delete_customer_contacts"); ok && s.D.HasChange("enable_delete_customer_contacts") {
+		_, customerContactsOk := s.D.GetOkExists("customer_contacts")
+		if enableDeleteCustomerContacts == true && customerContactsOk {
+			request.CustomerContacts = []oci_database.CustomerContact{}
 		}
 	}
 
