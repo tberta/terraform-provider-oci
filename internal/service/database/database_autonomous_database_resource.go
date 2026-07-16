@@ -2710,6 +2710,19 @@ func longTermBackupSupressDiff(key string, old string, new string, d *schema.Res
 		if tmpList := longTermBackupSchedule.([]interface{}); len(tmpList) > 0 {
 			isDisabled, _ := d.GetOkExists(fmt.Sprintf("long_term_backup_schedule.%d.is_disabled", 0))
 			if isDisabled.(bool) == true {
+				//PATCH: do not suppress the diff while is_disabled is still
+				//transitioning. Suppressing it unconditionally hides the false->true
+				//flip, so HasChange("long_term_backup_schedule") stays false in Update()
+				//and the deletion is never sent: the schedule becomes impossible to
+				//remove via Terraform (isDisabled=true means "delete the schedule",
+				//per LongTermBackUpScheduleDetails in the OCI SDK).
+				//CAVEAT: once applied, the API stops returning the schedule while the
+				//config still declares it, so this leaves a permanent diff. A complete
+				//upstream fix must also treat "config disabled + schedule already absent
+				//from state" as a no-op.
+				if strings.HasSuffix(key, ".is_disabled") && old != new {
+					return false
+				}
 				return true
 			}
 			return false
