@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -2672,6 +2673,19 @@ func (s *DatabaseAutonomousDatabaseResourceCrud) UpdateWithContext(ctx context.C
 	if backupRetentionPeriodInDays, ok := s.D.GetOkExists("backup_retention_period_in_days"); ok && s.D.HasChange("backup_retention_period_in_days") {
 		tmp := backupRetentionPeriodInDays.(int)
 		request.BackupRetentionPeriodInDays = &tmp
+	}
+
+	//PATCH: never send an update with an empty body. OCI answers
+	//400-InvalidParameter "No arguments or arguments same as current configuration were
+	//specified". A diff confined to provider-side control flags (enable_delete_customer_contacts,
+	//enable_delete_scheduled_operations — Terraform-only attributes with no API counterpart), or
+	//one already fully handled by a dedicated sub-call above (compartment, subscription,
+	//data_safe_status, open_mode, operations_insights_status…), lands here with nothing to send.
+	//AutonomousDatabaseId and RequestMetadata live on the outer request, not on the embedded
+	//details struct, so the zero-value comparison is exact.
+	if reflect.DeepEqual(request.UpdateAutonomousDatabaseDetails, oci_database.UpdateAutonomousDatabaseDetails{}) {
+		log.Printf("[DEBUG] UpdateAutonomousDatabase: empty update payload, skipping the call and refreshing instead")
+		return s.GetWithContext(ctx)
 	}
 
 	request.RequestMetadata.RetryPolicy = tfresource.GetRetryPolicy(s.DisableNotFoundRetries, "database")
