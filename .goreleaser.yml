@@ -30,14 +30,18 @@ builds:
     # flags were dead. The version arrives via the before-hook instead.
     ldflags:
       - '-s -w'
-    # Trimmed from upstream's 15-target matrix (freebsd/386/arm included) to the
-    # platforms actually consumed: CI runners, Apple Silicon and Intel Macs,
-    # Windows. Each target is a ~250 MB binary, so widening this costs real build
-    # time and release size. Add targets back here if a consumer needs them.
+    # Trimmed from upstream's 15-target matrix to linux only: these builds are
+    # consumed by CI runners. Each target is a ~270 MB binary, so every addition
+    # costs real build time and release size.
+    #
+    # CONSEQUENCE: there is no darwin build, so `terraform init` against a mirror
+    # holding only these artifacts fails on a macOS workstation, and a
+    # .terraform.lock.hcl generated on one carries no hash CI can use. Either
+    # keep the lock file gitignored, or generate it for linux explicitly:
+    #   terraform providers lock -platform=linux_amd64 <source-address>
+    # Add `darwin` back below if a workstation ever needs to run plans directly.
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
       - arm64

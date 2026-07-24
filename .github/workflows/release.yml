@@ -32,9 +32,9 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
-    # Six targets of a provider this large; the default 360 min is ample but the
-    # explicit cap stops a hung build from burning the budget.
-    timeout-minutes: 120
+    # Two linux targets at ~6m30s each (measured). The cap stops a hung build
+    # from burning the budget; raise it if the matrix widens.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
