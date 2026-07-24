@@ -1,0 +1,68 @@
+# Build, sign and publish a fork release.
+#
+# TAG SCHEME: v<upstream-version>-fix.<n>, e.g. v8.23.0-fix.1
+#
+#   - <upstream-version> is the upstream release these fixes sit on top of.
+#   - .<n> increments for each fork build against that same upstream base.
+#
+# The trigger deliberately does NOT match plain `v*`. This repository is a fork
+# and already carries every upstream tag; a `v*` trigger would fire a release
+# for each one the moment someone ran `git push origin --tags` after syncing
+# with upstream. `-fix.` cannot collide with an upstream tag.
+#
+# The suffix makes each version a semver PRE-RELEASE, which Terraform excludes
+# from the ~>, >=, >, <= and < operators -- consumers must pin exactly. If you
+# publish to the Terraform Registry and want range constraints to work, switch
+# to a plain-semver line instead (e.g. 8.23.1000, 8.23.1001) and update the
+# pattern below to match.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-fix.*'
+
+permissions:
+  # Needed to create the GitHub Release and upload its assets.
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    # Six targets of a provider this large; the default 360 min is ample but the
+    # explicit cap stops a hung build from burning the budget.
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # GoReleaser needs the full history and tags to resolve the version.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # go.mod requires >= 1.25.0. Read it from there rather than
+          # .go-version, which is stale (1.24.10) and would fail the build.
+          go-version-file: 'go.mod'
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        id: import_gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Consumed by the `signs` section of .goreleaser.yml.
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          # vendor/ is committed; never resolve modules over the network.
+          GOFLAGS: -mod=vendor
+          # Do not let the go command download a different toolchain.
+          GOTOOLCHAIN: local
