@@ -1,9 +1,19 @@
 # Visit https://goreleaser.com for documentation on how to customize this
 # behavior.
+version: 2
+
+project_name: terraform-provider-oci
+
 before:
   hooks:
-    # this is just an example and not a requirement for provider building/publishing
-    - GOTOOLCHAIN=go1.26.5+auto go mod tidy
+    # Version and ReleaseDate are consts, so -ldflags -X cannot set them.
+    # See scripts/stamp-version.sh for the full explanation.
+    - ./scripts/stamp-version.sh {{ .Version }}
+    # NOTE: upstream ran `go mod tidy` here, flagged in its own comment as
+    # "just an example and not a requirement". Dropped: it needs network
+    # access and can rewrite go.mod/go.sum out of sync with the committed
+    # vendor/ tree that these builds resolve against.
+
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
@@ -14,31 +24,36 @@ builds:
     mod_timestamp: '{{ .CommitTimestamp }}'
     flags:
       - -trimpath
+      # vendor/ is committed, so the build resolves no modules over the network.
+      - -mod=vendor
+    # No -X here: main.go declares neither `version` nor `commit`, so upstream's
+    # flags were dead. The version arrives via the before-hook instead.
     ldflags:
-      - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+      - '-s -w'
+    # Trimmed from upstream's 15-target matrix (freebsd/386/arm included) to the
+    # platforms actually consumed: CI runners, Apple Silicon and Intel Macs,
+    # Windows. Each target is a ~250 MB binary, so widening this costs real build
+    # time and release size. Add targets back here if a consumer needs them.
     goos:
-      - freebsd
-      - windows
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
-      - '386'
-      - arm
       - arm64
-    ignore:
-      - goos: darwin
-        goarch: '386'
     binary: '{{ .ProjectName }}_v{{ .Version }}'
+
 archives:
-  - format: zip
+  - formats: [zip]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+
 checksum:
   extra_files:
     - glob: 'terraform-registry-manifest.json'
       name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
+
 signs:
   - artifacts: checksum
     args:
@@ -47,22 +62,24 @@ signs:
       - "--batch"
       - "--local-user"
       - "{{ .Env.GPG_FINGERPRINT }}" # set this environment variable for your signing key
-      - "--passphrase"
-      - "{{ .Env.GPG_PASSPHRASE }}" #set this environment variable for your signing key
+      # NOTE: upstream also passed --passphrase here, which gpg ignores unless
+      # --pinentry-mode loopback is set. The release workflow presets the agent
+      # via crazy-max/ghaction-import-gpg instead, so no passphrase is needed.
       - "--output"
       - "${signature}"
       - "--detach-sign"
       - "${artifact}"
+
 release:
-  github:
-    owner: oracle
-    name: terraform-provider-oci
+  # No `github: owner/name` block: GoReleaser resolves the repository from the
+  # git remote. Hardcoding it is what made upstream's config publish to `oracle`.
   extra_files:
     - glob: 'terraform-registry-manifest.json'
       name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
   # If you want to manually examine the release before its live, uncomment this line:
   # draft: true
-changelog:
-  skip: false
 
-project_name: terraform-provider-oci
+changelog:
+  # Renamed from `skip` in GoReleaser v2. Disabled: this repo's history between
+  # fork tags is upstream's, so a generated changelog would be noise.
+  disable: true
