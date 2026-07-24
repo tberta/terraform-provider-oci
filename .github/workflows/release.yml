@@ -11,10 +11,13 @@
 # with upstream. `-fix.` cannot collide with an upstream tag.
 #
 # The suffix makes each version a semver PRE-RELEASE, which Terraform excludes
-# from the ~>, >=, >, <= and < operators -- consumers must pin exactly. If you
-# publish to the Terraform Registry and want range constraints to work, switch
-# to a plain-semver line instead (e.g. 8.23.1000, 8.23.1001) and update the
-# pattern below to match.
+# from the ~>, >=, >, <= and < operators -- consumers must pin exactly. If range
+# constraints are ever wanted, switch to a plain-semver line instead
+# (e.g. 8.23.1000, 8.23.1001) and update the pattern below to match.
+#
+# These builds are for private consumption through a filesystem or network
+# mirror, not the public Terraform Registry, so the release is unsigned and this
+# workflow needs NO repository secrets. See the note in .goreleaser.yml.
 name: Release
 
 on:
@@ -46,22 +49,15 @@ jobs:
           # .go-version, which is stale (1.24.10) and would fail the build.
           go-version-file: 'go.mod'
 
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        id: import_gpg
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
           args: release --clean
         env:
+          # The only credential this workflow needs, and Actions injects it
+          # automatically -- no repository secrets have to be configured.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Consumed by the `signs` section of .goreleaser.yml.
-          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           # vendor/ is committed; never resolve modules over the network.
           GOFLAGS: -mod=vendor
           # Do not let the go command download a different toolchain.
