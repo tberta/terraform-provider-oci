@@ -1,0 +1,12 @@
+{
+  "versions": [
+    {
+      "version": "8.23.0-fix.1",
+      "protocols": ["5.0"],
+      "platforms": [
+        {"os": "linux", "arch": "amd64"},
+        {"os": "linux", "arch": "arm64"}
+      ]
+    }
+  ]
+}
