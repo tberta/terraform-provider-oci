@@ -1,0 +1,9 @@
+{
+  "protocols": ["5.0"],
+  "os": "linux",
+  "arch": "amd64",
+  "filename": "terraform-provider-oci_8.23.0-fix.1_linux_amd64.zip",
+  "download_url": "https://github.com/tberta/terraform-provider-oci/releases/download/v8.23.0-fix.1/terraform-provider-oci_8.23.0-fix.1_linux_amd64.zip",
+  "shasums_url": "https://github.com/tberta/terraform-provider-oci/releases/download/v8.23.0-fix.1/terraform-provider-oci_8.23.0-fix.1_SHA256SUMS",
+  "shasum": "7173a097721ba02e659b28d6f2ef163f92d95be77fe86c7f4b714f208796d6ea"
+}
