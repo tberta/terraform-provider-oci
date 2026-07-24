@@ -26,8 +26,25 @@ on:
       - 'v*.*.*-fix.*'
 
 permissions:
-  # Needed to create the GitHub Release and upload its assets.
+  # Needed to create the GitHub Release, upload its assets, and commit the
+  # network mirror metadata.
   contents: write
+
+env:
+  # Provider source address. With a mirror this is only a naming key -- nothing
+  # ever contacts github.com to resolve it -- but it dictates the mirror path
+  # layout (<base>/<hostname>/<namespace>/<type>/), so changing it moves the
+  # published files and requires consumers to run
+  # `terraform state replace-provider`.
+  SOURCE_ADDR: github.com/tberta/oci
+  # Branch the mirror metadata is committed to, and which GitHub Pages serves
+  # from (Settings -> Pages -> Deploy from a branch -> this branch, /docs).
+  MIRROR_BRANCH: adb-day2-fixes
+
+# Two releases publishing mirror metadata at once would race on index.json.
+concurrency:
+  group: release-mirror
+  cancel-in-progress: false
 
 jobs:
   goreleaser:
@@ -62,3 +79,46 @@ jobs:
           GOFLAGS: -mod=vendor
           # Do not let the go command download a different toolchain.
           GOTOOLCHAIN: local
+
+  mirror:
+    name: Publish network mirror metadata
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the mirror branch
+        uses: actions/checkout@v4
+        with:
+          # Not the tag: this job commits, so it needs a branch to commit onto.
+          ref: ${{ env.MIRROR_BRANCH }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Generate mirror metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/build-network-mirror.sh \
+            "${GITHUB_REF_NAME#v}" \
+            "${GITHUB_REF_NAME}" \
+            "${SOURCE_ADDR}" \
+            "${GITHUB_REPOSITORY}" \
+            docs
+
+      - name: Commit and push
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --cached --quiet; then
+            echo "mirror metadata already up to date, nothing to commit"
+            exit 0
+          fi
+          git commit -m "Publish network mirror metadata for ${GITHUB_REF_NAME}"
+          # Rebase rather than force: the branch may have moved since checkout.
+          git pull --rebase origin "${MIRROR_BRANCH}"
+          git push origin "HEAD:${MIRROR_BRANCH}"
