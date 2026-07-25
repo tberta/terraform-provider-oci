@@ -20,7 +20,13 @@ builds:
       # usage by users in CI/CD systems like Terraform Cloud where
       # they are unable to install libraries.
       - CGO_ENABLED=0
-      - GOTOOLCHAIN=go1.26.5+auto
+      # NOTE: upstream pins GOTOOLCHAIN=go1.26.5+auto here. Deliberately dropped.
+      # The release workflow sets GOTOOLCHAIN=local and lets actions/setup-go
+      # install the version go.mod asks for, so the toolchain policy lives in one
+      # place. Upstream's line would override that, and `+auto` permits a network
+      # download -- which becomes actively wrong the moment upstream bumps go.mod
+      # past 1.26.5: this stale pin would then fetch the OLDER toolchain and build
+      # with it. Re-check on every rebase; it auto-merges in silently.
     mod_timestamp: '{{ .CommitTimestamp }}'
     flags:
       - -trimpath
