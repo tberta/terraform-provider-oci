@@ -15,9 +15,14 @@
 # constraints are ever wanted, switch to a plain-semver line instead
 # (e.g. 8.23.1000, 8.23.1001) and update the pattern below to match.
 #
-# These builds are for private consumption through a filesystem or network
-# mirror, not the public Terraform Registry, so the release is unsigned and this
-# workflow needs NO repository secrets. See the note in .goreleaser.yml.
+# These builds are never published to the public Terraform Registry. They are
+# consumed two ways, and this workflow publishes the metadata for both:
+#
+#   1. network mirror   -> docs/providers/...  (no signature needed)
+#   2. self-hosted registry protocol -> docs/registry/v1/...  (signature REQUIRED)
+#
+# Route 2 is why the release is GPG-signed and why this workflow needs the
+# GPG_PRIVATE_KEY and PASSPHRASE repository secrets. See .goreleaser.yml.
 name: Release
 
 on:
@@ -37,11 +42,22 @@ env:
   # published files and requires consumers to run
   # `terraform state replace-provider`.
   SOURCE_ADDR: github.com/tberta/oci
-  # Branch the mirror metadata is committed to, and which GitHub Pages serves
-  # from (Settings -> Pages -> Deploy from a branch -> this branch, /docs).
+  # Registry protocol address is tberta.github.io/<namespace>/<type>. The
+  # hostname is NOT part of the published path -- it is implied by the
+  # .well-known/terraform.json discovery document in the tberta/tberta.github.io
+  # repo, which must sit at the host root.
+  REGISTRY_NAMESPACE: tberta
+  REGISTRY_TYPE: oci
+  # Public half of the key goreleaser signs SHA256SUMS with. Published inline in
+  # every download response; the script refuses to publish if the release
+  # signature does not verify against it.
+  SIGNING_KEY: scripts/registry-signing-key.asc
+  # Branch the metadata is committed to, and which GitHub Pages serves from
+  # (Settings -> Pages -> Deploy from a branch -> this branch, /docs).
   MIRROR_BRANCH: adb-day2-fixes
 
-# Two releases publishing mirror metadata at once would race on index.json.
+# Two releases publishing at once would race on index.json and versions, both
+# of which are read-modify-write.
 concurrency:
   group: release-mirror
   cancel-in-progress: false
@@ -66,22 +82,30 @@ jobs:
           # .go-version, which is stale (1.24.10) and would fail the build.
           go-version-file: 'go.mod'
 
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        id: import_gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
           args: release --clean
         env:
-          # The only credential this workflow needs, and Actions injects it
-          # automatically -- no repository secrets have to be configured.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Consumed by the `signs` section of .goreleaser.yml. This action also
+          # preloads the passphrase into the agent, so gpg does not prompt.
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           # vendor/ is committed; never resolve modules over the network.
           GOFLAGS: -mod=vendor
           # Do not let the go command download a different toolchain.
           GOTOOLCHAIN: local
 
   mirror:
-    name: Publish network mirror metadata
+    name: Publish mirror and registry metadata
     needs: goreleaser
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -97,7 +121,7 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Generate mirror metadata
+      - name: Generate network mirror metadata
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -108,6 +132,21 @@ jobs:
             "${GITHUB_REPOSITORY}" \
             docs
 
+      # Separate script, separate protocol: this one needs the release signature
+      # and publishes the plain sha256, not the mirror's `h1:` dirhashes.
+      - name: Generate registry protocol metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/build-registry.sh \
+            "${GITHUB_REF_NAME#v}" \
+            "${GITHUB_REF_NAME}" \
+            "${REGISTRY_NAMESPACE}" \
+            "${REGISTRY_TYPE}" \
+            "${GITHUB_REPOSITORY}" \
+            docs \
+            "${SIGNING_KEY}"
+
       - name: Commit and push
         run: |
           set -eu
@@ -115,10 +154,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs
           if git diff --cached --quiet; then
-            echo "mirror metadata already up to date, nothing to commit"
+            echo "metadata already up to date, nothing to commit"
             exit 0
           fi
-          git commit -m "Publish network mirror metadata for ${GITHUB_REF_NAME}"
+          git commit -m "Publish mirror and registry metadata for ${GITHUB_REF_NAME}"
           # Rebase rather than force: the branch may have moved since checkout.
           git pull --rebase origin "${MIRROR_BRANCH}"
           git push origin "HEAD:${MIRROR_BRANCH}"

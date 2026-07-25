@@ -57,16 +57,28 @@ checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 
-# NOTE: upstream's `signs` section is deliberately absent. A detached GPG
-# signature over SHA256SUMS is required only by the public Terraform Registry.
-# These builds are consumed privately through a filesystem or network mirror,
-# where Terraform verifies the `h1:` hashes recorded in .terraform.lock.hcl and
-# never looks at a signature -- so signing would buy nothing while making the
-# release depend on two repository secrets. The SHA256SUMS file below is still
-# produced and is what the install path checks.
-#
-# To publish to the Terraform Registry later, restore the section from git
-# history and re-add the GPG import step to .github/workflows/release.yml.
+# A detached GPG signature over SHA256SUMS. This is NOT for the public Terraform
+# Registry -- these builds are never published there. It is required by the
+# self-hosted registry protocol endpoint under docs/registry/: Terraform's
+# registry install path enforces the signature (measured -- an unsigned download
+# response gets as far as checksumming, then fails with "authentication
+# signature from unknown issuer"). The network mirror path does not; it verifies
+# the `h1:` dirhashes in .terraform.lock.hcl instead. Both paths are published,
+# so the signature is what makes the registry one usable.
+signs:
+  - artifacts: checksum
+    args:
+      # Non-interactive: there is no tty in Actions.
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      # NOTE: upstream also passed --passphrase here, which gpg ignores unless
+      # --pinentry-mode loopback is set. The release workflow presets the agent
+      # via crazy-max/ghaction-import-gpg instead, so no passphrase is needed.
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
 
 release:
   # No `github: owner/name` block: GoReleaser resolves the repository from the
