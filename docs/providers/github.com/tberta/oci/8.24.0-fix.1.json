@@ -1,0 +1,16 @@
+{
+  "archives": {
+    "linux_amd64": {
+      "hashes": [
+        "h1:u5OrKBVku8pv8tngAwCNQOdCTwfLteFXuOnI6M6qq2Y="
+      ],
+      "url": "https://github.com/tberta/terraform-provider-oci/releases/download/v8.24.0-fix.1/terraform-provider-oci_8.24.0-fix.1_linux_amd64.zip"
+    },
+    "linux_arm64": {
+      "hashes": [
+        "h1:r7R2/D+nsk2TxB6ADFERlcgvQxzQwHh0xHnU+GPN1X8="
+      ],
+      "url": "https://github.com/tberta/terraform-provider-oci/releases/download/v8.24.0-fix.1/terraform-provider-oci_8.24.0-fix.1_linux_arm64.zip"
+    }
+  }
+}
