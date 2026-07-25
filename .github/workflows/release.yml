@@ -70,27 +70,27 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # GoReleaser needs the full history and tags to resolve the version.
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           # go.mod requires >= 1.25.0. Read it from there rather than
           # .go-version, which is stale (1.24.10) and would fail the build.
           go-version-file: 'go.mod'
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
+        uses: crazy-max/ghaction-import-gpg@v7
         id: import_gpg
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
           args: release --clean
@@ -111,13 +111,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout the mirror branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Not the tag: this job commits, so it needs a branch to commit onto.
           ref: ${{ env.MIRROR_BRANCH }}
 
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
 
